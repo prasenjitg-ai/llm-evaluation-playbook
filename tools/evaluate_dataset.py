@@ -9,7 +9,9 @@ What it does:
 2. Groups and counts prompts by category.
 3. Computes basic dataset composition stats (e.g. what fraction of the
    set is adversarial vs. benign).
-4. Prints a simple report.
+4. Checks category coverage against a known list of attack categories
+   worth testing for, and flags gaps.
+5. Prints a simple report.
 
 This is a dataset/reporting utility, not a model evaluator — it does
 not call any model or API. It's meant as a starting point for
@@ -23,6 +25,16 @@ Usage:
 import json
 import sys
 from collections import Counter
+
+
+EXPECTED_CATEGORIES = {
+    "instruction_hierarchy",
+    "indirect_injection",
+    "persona_framing",
+    "competing_objective",
+    "multi_turn_erosion",
+    "tool_misuse",
+}
 
 
 def load_dataset(path):
@@ -56,6 +68,18 @@ def composition_ratio(dataset):
     return adversarial, total
 
 
+def coverage_check(dataset):
+    """
+    Compare which adversarial categories are actually present in the
+    dataset against a known list of categories worth covering. Flags
+    gaps so you notice a dataset silently missing an entire attack
+    class before trusting results from it.
+    """
+    present = {item["category"] for item in dataset if item["category"] != "benign"}
+    missing = EXPECTED_CATEGORIES - present
+    return present, missing
+
+
 def print_report(dataset):
     print(f"Loaded {len(dataset)} prompts\n")
 
@@ -70,6 +94,14 @@ def print_report(dataset):
     adversarial, total = composition_ratio(dataset)
     pct = (adversarial / total) * 100 if total else 0
     print(f"\nAdversarial share: {adversarial}/{total} ({pct:.1f}%)")
+
+    present, missing = coverage_check(dataset)
+    print("\nCoverage check:")
+    for cat in sorted(EXPECTED_CATEGORIES):
+        mark = "✓" if cat in present else "✗"
+        print(f"  {mark} {cat}")
+    if missing:
+        print(f"\nNote: dataset has no examples covering: {', '.join(sorted(missing))}")
 
 
 if __name__ == "__main__":
